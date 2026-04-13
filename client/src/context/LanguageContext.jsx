@@ -16,9 +16,9 @@ const translations = {
         users: "Tài khoản",
         settings: "Cài đặt",
         logout: "Đăng xuất",
-        pms_system: "Hệ thống PMS",
+        pms_system: "Hệ thống PM System",
         pms_management: "Hệ thống Quản lý Thiết bị",
-        factory_management: "Quản lý Nhà máy PMS",
+        factory_management: "Quản lý Nhà máy PM System",
 
         // Common Actions
         add: "Thêm mới",
@@ -243,9 +243,9 @@ const translations = {
         users: "Users",
         settings: "Settings",
         logout: "Logout",
-        pms_system: "PMS System",
+        pms_system: "PM System",
         pms_management: "Equipment Management System",
-        factory_management: "PMS Factory Management",
+        factory_management: "PM Factory Management",
 
         // Common Actions
         add: "Add New",
@@ -468,9 +468,9 @@ const translations = {
         users: "사용자 관리",
         settings: "설정",
         logout: "로그아웃",
-        pms_system: "PMS 시스템",
+        pms_system: "PM 시스템",
         pms_management: "설비 관리 시스템",
-        factory_management: "PMS 공장 관리 시스템",
+        factory_management: "PM 공장 관리 시스템",
 
         // Common Actions
         add: "신규 추가",

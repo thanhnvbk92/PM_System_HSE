@@ -38,8 +38,8 @@ const Login = () => {
             <div className="auth-bg" style={{ backgroundImage: 'url("/login_bg.png")' }}></div>
             <div className="auth-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '1rem' }}>
                 <div className="glass-card auth-glass" style={{ width: '100%', maxWidth: '440px', padding: '3rem', borderRadius: '24px' }}>
-                    <div style={{ width: '70px', height: '70px', background: 'rgba(255, 255, 255, 0.15)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', transform: 'rotate(-10deg)', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>
-                        <ShieldCheck size={40} color="#fff" />
+                    <div style={{ width: '80px', height: '80px', marginBottom: '1.5rem', margin: '0 auto' }}>
+                        <img src="/logo.png" alt="PM System Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                     <h2 style={{ fontSize: '2.25rem', fontWeight: '900', letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>{t('login')}</h2>
                     <p style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '1rem' }}>{t('pms_management')}</p>

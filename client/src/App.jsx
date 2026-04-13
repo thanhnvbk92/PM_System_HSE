@@ -105,10 +105,10 @@ const MainLayout = ({ children }) => {
             {isSidebarOpen && <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>}
 
             <aside className={`sidebar ${isSidebarOpen ? 'mobile-open' : ''}`}>
-                <div className="sidebar-logo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <ShieldCheck size={32} color="#6366f1" />
-                        <span style={{ fontWeight: '800', fontSize: '1.25rem' }}>{t('pms_system')}</span>
+                <div className="sidebar-logo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0.5rem 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <img src="/logo.png" alt="PM System Logo" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
+                        <span style={{ fontWeight: '800', fontSize: '1.25rem', color: '#1e293b' }}>{t('pms_system')}</span>
                     </div>
                     <button
                         className="mobile-toggle"

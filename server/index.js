@@ -140,6 +140,24 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
     res.json(req.user);
 });
 
+app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+    try {
+        const [users] = await pool.query('SELECT password FROM users WHERE id = ?', [userId]);
+        if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+
+        const validPass = await bcrypt.compare(currentPassword, users[0].password);
+        if (!validPass) return res.status(400).json({ error: 'Mật khẩu hiện tại không đúng' });
+
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashedNewPassword, userId]);
+        res.json({ message: 'Mật khẩu đã được thay đổi thành công' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // --- API UPLOAD ---
 app.post('/api/upload', authMiddleware, upload.single('image'), async (req, res) => {
     try {

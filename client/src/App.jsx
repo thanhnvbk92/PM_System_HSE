@@ -9,10 +9,18 @@ import {
     Bell,
     MapPin,
     Users,
+    Bell,
+    MapPin,
+    Users,
     LogOut,
     Menu,
-    X
+    X,
+    User,
+    Lock,
+    Info,
+    Shield
 } from 'lucide-react';
+import axios from 'axios';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useLanguage } from './context/LanguageContext';
@@ -50,10 +58,152 @@ const PrivateRoute = ({ children, adminOnly = false }) => {
     return children;
 };
 
+const AccountInfoModal = ({ isOpen, onClose, user }) => {
+    const { t } = useLanguage();
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content glass-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800' }}>{t('account_info')}</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                        <X size={24} />
+                    </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '12px' }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>
+                            {user?.username?.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>{user?.full_name}</div>
+                            <div style={{ color: '#64748b', fontSize: '0.85rem' }}>@{user?.username}</div>
+                        </div>
+                    </div>
+                    <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                        <div style={{ padding: '0.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 'bold' }}>{t('role')}</span>
+                            <div style={{ fontWeight: '600', textTransform: 'capitalize' }}>{user?.role}</div>
+                        </div>
+                        <div style={{ padding: '0.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 'bold' }}>{t('department')}</span>
+                            <div style={{ fontWeight: '600' }}>{user?.department || 'N/A'}</div>
+                        </div>
+                        <div style={{ padding: '0.5rem', borderBottom: '1px solid #f1f5f9' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 'bold' }}>{t('employee_id')}</span>
+                            <div style={{ fontWeight: '600' }}>{user?.employee_id || 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ChangePasswordModal = ({ isOpen, onClose }) => {
+    const { t } = useLanguage();
+    const [currentPassword, setCurrentPassword] = React.useState('');
+    const [newPassword, setNewPassword] = React.useState('');
+    const [confirmPassword, setConfirmPassword] = React.useState('');
+    const [loading, setLoading] = React.useState(false);
+    const [message, setMessage] = React.useState({ type: '', text: '' });
+
+    if (!isOpen) return null;
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        if (newPassword !== confirmPassword) {
+            return setMessage({ type: 'error', text: t('passwords_dont_match') });
+        }
+        setLoading(true);
+        try {
+            await axios.post('/api/auth/change-password', { currentPassword, newPassword });
+            setMessage({ type: 'success', text: t('change_pass_success') });
+            setTimeout(() => {
+                onClose();
+                setCurrentPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setMessage({ type: '', text: '' });
+            }, 2000);
+        } catch (err) {
+            setMessage({ type: 'error', text: err.response?.data?.error || t('change_pass_error') });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-content glass-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800' }}>{t('change_password')}</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                        <X size={24} />
+                    </button>
+                </div>
+
+                {message.text && (
+                    <div style={{
+                        padding: '0.75rem',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        backgroundColor: message.type === 'success' ? '#dcfce7' : '#fee2e2',
+                        color: message.type === 'success' ? '#166534' : '#991b1b',
+                        fontSize: '0.85rem',
+                        fontWeight: '600'
+                    }}>
+                        {message.text}
+                    </div>
+                )}
+
+                <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: '700' }}>{t('current_password')}</label>
+                        <input
+                            type="password" required
+                            className="input-field"
+                            value={currentPassword}
+                            onChange={e => setCurrentPassword(e.target.value)}
+                            style={{ width: '100%', padding: '0.75rem' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: '700' }}>{t('new_password')}</label>
+                        <input
+                            type="password" required
+                            className="input-field"
+                            value={newPassword}
+                            onChange={e => setNewPassword(e.target.value)}
+                            style={{ width: '100%', padding: '0.75rem' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: '700' }}>{t('confirm_password')}</label>
+                        <input
+                            type="password" required
+                            className="input-field"
+                            value={confirmPassword}
+                            onChange={e => setConfirmPassword(e.target.value)}
+                            style={{ width: '100%', padding: '0.75rem' }}
+                        />
+                    </div>
+                    <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '0.8rem' }}>
+                        {loading ? t('processing') : t('save')}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const MainLayout = ({ children }) => {
     const { user, logout } = useAuth();
     const { lang, setLang, t } = useLanguage();
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+    const [isAccountModalOpen, setIsAccountModalOpen] = React.useState(false);
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false);
     const location = useLocation();
 
     const [contextMenu, setContextMenu] = React.useState({ x: 0, y: 0, visible: false });
@@ -194,13 +344,30 @@ const MainLayout = ({ children }) => {
                                     left: contextMenu.x,
                                     background: '#fff',
                                     boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                                    borderRadius: '10px',
+                                    borderRadius: '12px',
                                     padding: '0.5rem',
                                     zIndex: 1000,
-                                    minWidth: '150px',
+                                    minWidth: '180px',
                                     border: '1px solid #e2e8f0',
                                     animation: 'fadeIn 0.1s ease-out'
                                 }}>
+                                    <button
+                                        onClick={() => { setIsAccountModalOpen(true); setContextMenu({ ...contextMenu, visible: false }); }}
+                                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: 'none', border: 'none', borderRadius: '6px', color: '#1e293b', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
+                                        className="context-menu-item"
+                                    >
+                                        <Info size={18} color="#6366f1" />
+                                        <span>{t('account_info')}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => { setIsPasswordModalOpen(true); setContextMenu({ ...contextMenu, visible: false }); }}
+                                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: 'none', border: 'none', borderRadius: '6px', color: '#1e293b', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
+                                        className="context-menu-item"
+                                    >
+                                        <Lock size={18} color="#f59e0b" />
+                                        <span>{t('change_password')}</span>
+                                    </button>
+                                    <div style={{ height: '1px', background: '#f1f5f9', margin: '0.4rem 0' }}></div>
                                     <button
                                         onClick={logout}
                                         style={{
@@ -227,6 +394,9 @@ const MainLayout = ({ children }) => {
                         </div>
                     </div>
                 </header>
+
+                <AccountInfoModal isOpen={isAccountModalOpen} onClose={() => setIsAccountModalOpen(false)} user={user} />
+                <ChangePasswordModal isOpen={isPasswordModalOpen} onClose={() => setIsPasswordModalOpen(false)} />
 
                 <div style={{ padding: '1.5rem' }}>
                     {children}

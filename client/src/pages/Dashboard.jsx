@@ -81,8 +81,8 @@ const Dashboard = () => {
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
                             <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
                             <Legend iconType="circle" />
-                            <Area type="monotone" dataKey="imports" name="Nhập kho" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorImport)" />
-                            <Area type="monotone" dataKey="exports" name="Xuất kho" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorExport)" />
+                            <Area type="monotone" dataKey="imports" name="Nhập kho" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorImport)" label={{ position: 'top', fontSize: 10, fill: '#6366f1', fontWeight: 'bold' }} />
+                            <Area type="monotone" dataKey="exports" name="Xuất kho" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorExport)" label={{ position: 'top', fontSize: 10, fill: '#f59e0b', fontWeight: 'bold' }} />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
@@ -92,7 +92,7 @@ const Dashboard = () => {
                         <ShieldCheck size={20} color="#10b981" />
                         <h3 style={{ margin: 0 }}>Số lượng thiết bị Hiệu chuẩn hằng ngày</h3>
                     </div>
-                    <div style={{ flex: 1, minHeight: '300px' }}>
+                    <div style={{ flex: 1, minHeight: '280px' }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={trends.calibTrends || []}>
                                 <defs>
@@ -105,7 +105,7 @@ const Dashboard = () => {
                                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
                                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
-                                <Area type="monotone" dataKey="count" name="Đã hiệu chuẩn" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCalib)" />
+                                <Area type="monotone" dataKey="count" name="Đã hiệu chuẩn" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCalib)" label={{ position: 'top', fontSize: 10, fill: '#10b981', fontWeight: 'bold' }} />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -122,7 +122,7 @@ const Dashboard = () => {
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
                             <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
-                            <Line type="stepAfter" dataKey="count" name="Số lượng lỗi" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                            <Line type="stepAfter" dataKey="count" name="Số lượng lỗi" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} label={{ position: 'top', fontSize: 10, fill: '#ef4444', fontWeight: 'bold' }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>

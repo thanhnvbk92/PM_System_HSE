@@ -203,7 +203,7 @@ const MainLayout = ({ children }) => {
     const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false);
     const location = useLocation();
 
-    const [contextMenu, setContextMenu] = React.useState({ x: 0, y: 0, visible: false });
+    const [userMenu, setUserMenu] = React.useState({ x: 0, y: 0, visible: false });
 
     // --- IDLE TIMER LOGIC ---
     // Tự động đăng xuất sau 30 phút không hoạt động
@@ -231,21 +231,22 @@ const MainLayout = ({ children }) => {
         };
     }, [resetTimer]);
 
-    // --- CONTEXT MENU LOGIC ---
-    const handleContextMenu = (e) => {
-        e.preventDefault();
-        setContextMenu({
-            x: e.pageX,
-            y: e.pageY,
-            visible: true
+    // --- USER MENU LOGIC ---
+    const toggleUserMenu = (e) => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        setUserMenu({
+            x: rect.right - 180,
+            y: rect.bottom + 10,
+            visible: !userMenu.visible
         });
     };
 
     React.useEffect(() => {
-        const handleClick = () => setContextMenu({ ...contextMenu, visible: false });
+        const handleClick = () => setUserMenu(prev => ({ ...prev, visible: false }));
         window.addEventListener('click', handleClick);
         return () => window.removeEventListener('click', handleClick);
-    }, [contextMenu]);
+    }, []);
 
     return (
         <div className="app-container">
@@ -322,8 +323,8 @@ const MainLayout = ({ children }) => {
 
                         <Bell size={20} style={{ color: '#94a3b8', cursor: 'pointer' }} />
                         <div
-                            onContextMenu={handleContextMenu}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '1rem', borderLeft: '1px solid #e2e8f0', cursor: 'context-menu', position: 'relative' }}
+                            onClick={toggleUserMenu}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '1rem', borderLeft: '1px solid #e2e8f0', cursor: 'pointer', position: 'relative' }}
                         >
                             <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>
                                 {user?.username?.substring(0, 2).toUpperCase()}
@@ -333,23 +334,23 @@ const MainLayout = ({ children }) => {
                                 <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'capitalize' }}>{user?.role}</div>
                             </div>
 
-                            {/* Custom Context Menu */}
-                            {contextMenu.visible && (
+                            {/* Custom User Menu */}
+                            {userMenu.visible && (
                                 <div style={{
                                     position: 'fixed',
-                                    top: contextMenu.y,
-                                    left: contextMenu.x,
+                                    top: userMenu.y,
+                                    left: userMenu.x,
                                     background: '#fff',
-                                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                    boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
                                     borderRadius: '12px',
                                     padding: '0.5rem',
                                     zIndex: 1000,
                                     minWidth: '180px',
                                     border: '1px solid #e2e8f0',
-                                    animation: 'fadeIn 0.1s ease-out'
+                                    animation: 'fadeIn 0.2s ease-out'
                                 }}>
                                     <button
-                                        onClick={() => { setIsAccountModalOpen(true); setContextMenu({ ...contextMenu, visible: false }); }}
+                                        onClick={() => { setIsAccountModalOpen(true); setUserMenu({ ...userMenu, visible: false }); }}
                                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: 'none', border: 'none', borderRadius: '6px', color: '#1e293b', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
                                         className="context-menu-item"
                                     >
@@ -357,7 +358,7 @@ const MainLayout = ({ children }) => {
                                         <span>{t('account_info')}</span>
                                     </button>
                                     <button
-                                        onClick={() => { setIsPasswordModalOpen(true); setContextMenu({ ...contextMenu, visible: false }); }}
+                                        onClick={() => { setIsPasswordModalOpen(true); setUserMenu({ ...userMenu, visible: false }); }}
                                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: 'none', border: 'none', borderRadius: '6px', color: '#1e293b', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
                                         className="context-menu-item"
                                     >

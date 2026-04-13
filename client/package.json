@@ -1,0 +1,28 @@
+{
+  "name": "client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react-swc": "^4.3.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1"
+  },
+  "dependencies": {
+    "axios": "^1.14.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^1.7.0",
+    "papaparse": "^5.5.3",
+    "react-barcode": "^1.6.1",
+    "react-router-dom": "^7.14.0",
+    "recharts": "^3.8.1"
+  }
+}

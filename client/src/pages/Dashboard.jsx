@@ -78,7 +78,7 @@ const Dashboard = () => {
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 'dataMax + 10']} />
                             <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
                             <Legend iconType="circle" />
                             <Area type="monotone" dataKey="imports" name="Nhập kho" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorImport)" label={{ position: 'top', fontSize: 10, fill: '#6366f1', fontWeight: 'bold' }} />
@@ -103,7 +103,7 @@ const Dashboard = () => {
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 'dataMax + 10']} />
                                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
                                 <Area type="monotone" dataKey="count" name="Đã hiệu chuẩn" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCalib)" label={{ position: 'top', fontSize: 10, fill: '#10b981', fontWeight: 'bold' }} />
                             </AreaChart>
@@ -120,7 +120,7 @@ const Dashboard = () => {
                         <LineChart data={trends.ngTrends}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 'dataMax + 10']} />
                             <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
                             <Line type="stepAfter" dataKey="count" name="Số lượng lỗi" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} label={{ position: 'top', fontSize: 10, fill: '#ef4444', fontWeight: 'bold' }} />
                         </LineChart>

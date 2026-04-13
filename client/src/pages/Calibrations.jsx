@@ -75,13 +75,13 @@ const Calibrations = () => {
 
         let matchesTab = true;
         if (activeTab === 'overdue') {
-            matchesTab = nextDate && nextDate < today;
+            matchesTab = nextDate && nextDate < today && item.is_at_hse === 1 && (item.status === 'OK' || item.status === 'Available' || item.status === 'In Use');
         } else if (activeTab === 'upcoming') {
             if (!nextDate) matchesTab = false;
             else {
                 const diffTime = nextDate - today;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                matchesTab = diffDays >= 0 && diffDays <= daysThreshold;
+                matchesTab = diffDays >= 0 && diffDays <= daysThreshold && item.is_at_hse === 1 && (item.status === 'OK' || item.status === 'Available' || item.status === 'In Use');
             }
         }
 
@@ -224,7 +224,7 @@ const Calibrations = () => {
         today.setHours(0, 0, 0, 0);
         const diffTime = nextDate - today;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays >= 0 && diffDays <= daysThreshold;
+        return diffDays >= 0 && diffDays <= daysThreshold && item.is_at_hse === 1 && (item.status === 'OK' || item.status === 'Available' || item.status === 'In Use');
     }).length;
 
     const overdueCount = data.filter(item => {
@@ -232,7 +232,7 @@ const Calibrations = () => {
         const nextDate = new Date(item.expiry_date);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        return nextDate < today;
+        return nextDate < today && item.is_at_hse === 1 && (item.status === 'OK' || item.status === 'Available' || item.status === 'In Use');
     }).length;
 
     return (

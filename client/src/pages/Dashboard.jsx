@@ -31,7 +31,7 @@ const Dashboard = () => {
                 const total = eqData.length;
                 const ok = eqData.filter(e => e.status === 'OK' || e.status === 'Available' || e.status === 'In Use').length;
                 const ng = eqData.filter(e => e.status === 'NG' || e.status === 'Broken' || e.status === 'Maintenance').length;
-                const okExpired = eqData.filter(e => (e.status === 'OK' || e.status === 'Available' || e.status === 'In Use') && e.is_calibrated && new Date(e.expiry_date) < new Date()).length;
+                const okExpired = eqData.filter(e => (e.status === 'OK' || e.status === 'Available' || e.status === 'In Use') && e.is_calibrated && e.is_at_hse === 1 && new Date(e.expiry_date) < new Date()).length;
 
                 setStats({ total, ok, ng, okExpired });
 

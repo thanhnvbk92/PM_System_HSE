@@ -38,7 +38,7 @@ const Login = () => {
             <div className="auth-bg" style={{ backgroundImage: 'url("/login_bg.png")' }}></div>
             <div className="auth-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '1rem' }}>
                 <div className="glass-card auth-glass" style={{ width: '100%', maxWidth: '440px', padding: '3rem', borderRadius: '24px' }}>
-                    <div style={{ width: '80px', height: '80px', marginBottom: '1.5rem', margin: '0 auto' }}>
+                    <div style={{ width: '140px', height: '140px', marginBottom: '2rem', margin: '0 auto' }}>
                         <img src="/logo.png" alt="PM System Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                     <h2 style={{ fontSize: '2.25rem', fontWeight: '900', letterSpacing: '-0.025em', marginBottom: '0.5rem' }}>{t('login')}</h2>

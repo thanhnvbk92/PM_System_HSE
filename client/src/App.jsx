@@ -107,7 +107,7 @@ const MainLayout = ({ children }) => {
             <aside className={`sidebar ${isSidebarOpen ? 'mobile-open' : ''}`}>
                 <div className="sidebar-logo" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0.5rem 0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <img src="/logo.png" alt="PM System Logo" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
+                        <img src="/logo.png" alt="PM System Logo" style={{ width: '54px', height: '54px', objectFit: 'contain' }} />
                         <span style={{ fontWeight: '800', fontSize: '1.25rem', color: '#1e293b' }}>{t('pms_system')}</span>
                     </div>
                     <button

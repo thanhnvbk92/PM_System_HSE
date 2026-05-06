@@ -20,6 +20,28 @@ const Dashboard = () => {
     const [equipment, setEquipment] = useState([]);
     const [trends, setTrends] = useState({ transactions: [], ngTrends: [], calibTrends: [] });
 
+    const fillLast7Days = (data, dateKey, valueKeys) => {
+        const result = [];
+        const today = new Date();
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(today.getDate() - i);
+            const dateStr = d.toISOString().split('T')[0];
+
+            const existing = data.find(item => {
+                const itemDate = new Date(item[dateKey]).toISOString().split('T')[0];
+                return itemDate === dateStr;
+            });
+
+            const newItem = { date: dateStr };
+            valueKeys.forEach(key => {
+                newItem[key] = existing ? (existing[key] || 0) : 0;
+            });
+            result.push(newItem);
+        }
+        return result;
+    };
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -37,7 +59,14 @@ const Dashboard = () => {
 
                 // Fetch Trends separately
                 axios.get(`/api/stats/trends`)
-                    .then(res => setTrends(res.data || { transactions: [], ngTrends: [], calibTrends: [] }))
+                    .then(res => {
+                        const raw = res.data || { transactions: [], ngTrends: [], calibTrends: [] };
+                        setTrends({
+                            transactions: fillLast7Days(raw.transactions || [], 'date', ['imports', 'exports']),
+                            ngTrends: fillLast7Days(raw.ngTrends || [], 'date', ['count']),
+                            calibTrends: fillLast7Days(raw.calibTrends || [], 'date', ['count'])
+                        });
+                    })
                     .catch(e => console.error("Trend data error:", e));
 
             } catch (err) {
@@ -103,7 +132,7 @@ const Dashboard = () => {
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 'dataMax + 10']} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 'dataMax + 5']} />
                                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
                                 <Area type="monotone" dataKey="count" name="Đã hiệu chuẩn" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCalib)" label={{ position: 'top', fontSize: 10, fill: '#10b981', fontWeight: 'bold' }} />
                             </AreaChart>
@@ -120,7 +149,7 @@ const Dashboard = () => {
                         <LineChart data={trends.ngTrends}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(val) => new Date(val).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 'dataMax + 10']} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b' }} domain={[0, 'dataMax + 2']} />
                             <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)' }} />
                             <Line type="stepAfter" dataKey="count" name="Số lượng lỗi" stroke="#ef4444" strokeWidth={3} dot={{ r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} label={{ position: 'top', fontSize: 10, fill: '#ef4444', fontWeight: 'bold' }} />
                         </LineChart>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Search, Warehouse, MapPin, Monitor, Printer, Camera, Download, Upload, X, Check, Zap, Maximize, Wrench, History } from 'lucide-react';
+import { Plus, Search, Warehouse, MapPin, Monitor, Printer, Camera, Download, Upload, X, Check, Zap, Maximize, Wrench, History, Filter, ShieldCheck } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import Papa from 'papaparse';
 import { useLanguage } from '../context/LanguageContext';
@@ -30,9 +30,9 @@ const Equipment = () => {
     // Form State
     const [newEq, setNewEq] = useState({
         code: '', name: '', part_no: '', serial_no: '',
-        category: 'Thiết bị', owner_company: 'LGE', status: 'OK', jig_id: '',
-        is_calibrated: false, expiry_date: '', image_url: '',
-        is_bulk: false, current_quantity: 1
+        category: '', category_id: '', owner_company: 'LGE', status: 'OK', jig_id: '',
+        is_bulk: false, current_quantity: 1.0, unit: 'ea', min_stock: 0.0,
+        is_calibrated: false, expiry_date: '', last_calibration: '', image_url: ''
     });
 
     // Maintenance State
@@ -57,6 +57,7 @@ const Equipment = () => {
     const [jigs, setJigs] = useState([]);
     const [selectedLine, setSelectedLine] = useState('');
     const [selectedStation, setSelectedStation] = useState('');
+    const [categories, setCategories] = useState([]);
 
     const filteredItems = useMemo(() => {
         return items.filter(item => {
@@ -67,10 +68,10 @@ const Equipment = () => {
                 item.part_no?.toLowerCase().includes(s) ||
                 item.serial_no?.toLowerCase().includes(s);
 
-            const matchesCategory = !columnFilters.category || item.category === columnFilters.category;
+            const matchesCategory = !columnFilters.category || (item.category === columnFilters.category || item.category_name === columnFilters.category);
             const matchesOwner = !columnFilters.owner_company || item.owner_company === columnFilters.owner_company;
             const matchesStatus = !columnFilters.status || item.status === columnFilters.status;
-            const matchesLine = !columnFilters.line_name || item.line_name === columnFilters.line_name;
+            const matchesLine = !columnFilters.line_name || (item.line_name === columnFilters.line_name || item.location_name === columnFilters.line_name);
             const matchesHSE = !columnFilters.is_at_hse || String(item.is_at_hse) === columnFilters.is_at_hse;
 
             return matchesSearch && matchesCategory && matchesOwner && matchesStatus && matchesLine && matchesHSE;
@@ -108,14 +109,28 @@ const Equipment = () => {
         }
     };
 
+    const fetchCategories = async () => {
+        try {
+            const res = await axios.get(`/api/categories`);
+            setCategories(res.data);
+        } catch (e) {
+            console.error("Error fetching categories:", e);
+        }
+    };
+
     const fetchLines = async () => {
-        const res = await axios.get(`/api/locations/lines`);
-        setLines(res.data);
+        try {
+            const res = await axios.get(`/api/locations/lines`);
+            setLines(res.data);
+        } catch (e) {
+            console.error("Error fetching lines:", e);
+        }
     };
 
     useEffect(() => {
         fetchItems();
         fetchLines();
+        fetchCategories();
     }, []);
 
     // Handle Location Cascading
@@ -123,14 +138,35 @@ const Equipment = () => {
         if (selectedLine) {
             axios.get(`/api/locations/stations/${selectedLine}`)
                 .then(res => setStations(res.data));
+            // Only clear station/jig if the line actually changed and it's not the one currently in newEq
+            if (newEq.line_id !== selectedLine) {
+                setStations([]); setJigs([]); setSelectedStation(``);
+            }
+        } else {
             setStations([]); setJigs([]); setSelectedStation(``);
         }
     }, [selectedLine]);
 
     useEffect(() => {
+        if (newEq.last_calibration) {
+            const calDate = new Date(newEq.last_calibration);
+            if (!isNaN(calDate.getTime())) {
+                const nextDate = new Date(calDate);
+                nextDate.setFullYear(calDate.getFullYear() + 1);
+                setNewEq(prev => ({ ...prev, expiry_date: nextDate.toISOString().split('T')[0] }));
+            }
+        }
+    }, [newEq.last_calibration]);
+
+    useEffect(() => {
         if (selectedStation) {
             axios.get(`/api/locations/jigs/${selectedStation}`)
                 .then(res => setJigs(res.data));
+            // Only clear jig if the station actually changed and it's not the one currently in newEq
+            if (newEq.station_id !== selectedStation) {
+                setJigs([]);
+            }
+        } else {
             setJigs([]);
         }
     }, [selectedStation]);
@@ -236,7 +272,7 @@ const Equipment = () => {
 
     const resetNewEq = () => {
         setNewEq({
-            code: '', name: '', part_no: '', serial_no: '', category: 'Thiết bị', owner_company: 'LGE', status: 'OK', jig_id: '', is_calibrated: false, expiry_date: '', last_calibration: '', image_url: '', is_bulk: false, current_quantity: 1
+            code: '', name: '', part_no: '', serial_no: '', category: '', category_id: '', owner_company: 'LGE', status: 'OK', jig_id: '', is_calibrated: false, expiry_date: '', last_calibration: '', image_url: '', is_bulk: false, current_quantity: 1, unit: 'ea', min_stock: 0
         });
         setSelectedLine('');
         setSelectedStation('');
@@ -281,6 +317,7 @@ const Equipment = () => {
             alert(t('error_upload_image'));
         }
     };
+
 
     // Scanner Logic
     useEffect(() => {
@@ -372,8 +409,6 @@ const Equipment = () => {
             'Vị trí lắp đặt': item.line_name || 'Hệ thống chung',
             'Trạm/Máy': item.station_name || '',
             'Jig': item.jig_name || '',
-            'Số Lượng Tồn': item.current_quantity || 1,
-            'Vật Tư Tiêu Hao': item.is_bulk ? 'Có' : 'Không',
             'Yêu cầu Hiệu chuẩn': item.is_calibrated ? 'Có' : 'Không',
             'Ngày hiệu chuẩn gần nhất': item.last_calibration ? new Date(item.last_calibration).toLocaleDateString('vi-VN') : '',
             'Ngày hết hạn': item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('vi-VN') : ''
@@ -444,8 +479,6 @@ const Equipment = () => {
                             part_no: row['Part No'] || '',
                             serial_no: row['Serial No'] || '',
                             asset_type: row['Loại (Danh mục)'] || '',
-                            is_bulk: row['Vật Tư Tiêu Hao'] === 'Có' || row['Vật Tư Tiêu Hao'] === 'true',
-                            current_quantity: parseInt(row['Số Lượng Tồn']) || 1,
                             status: row['Trạng Thái'] || 'Available',
                             is_calibrated: row['Yêu cầu Hiệu chuẩn'] === 'Có' || row['Yêu cầu Hiệu chuẩn'] === 'true',
                             last_calibration: parseDate(row['Ngày hiệu chuẩn gần nhất']),
@@ -586,7 +619,7 @@ const Equipment = () => {
                             <Search size={22} className="search-icon" />
                             <input
                                 type="text"
-                                placeholder={t('search_placeholder') || 'Tìm kiếm hoặc quét mã...'}
+                                placeholder={t('search_placeholder') || 'Tìm kiếm theo tên, mã, serial...'}
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
                                 className="search-input"
@@ -602,16 +635,78 @@ const Equipment = () => {
 
                         <div className="search-stats">
                             <div className="stats-item">
-                                <span className="stats-label">📊 {t('results')}:</span>
+                                <span className="stats-label">{t('results')}:</span>
                                 <span className="stats-value">{filteredItems.length}</span>
                                 <span className="stats-total">/ {items.length}</span>
                             </div>
-                            {(searchTerm || Object.values(columnFilters).some(v => v !== '')) && (
-                                <button className="clear-btn" onClick={resetFilters}>
-                                    <X size={14} style={{ marginRight: '4px' }} /> {t('clear_filters') || 'Xóa lọc'}
-                                </button>
-                            )}
                         </div>
+                    </div>
+
+                    <div className="filter-dashboard">
+                        <div className="filter-grid">
+                            <div className="filter-group">
+                                <label><Filter size={14} /> {t('category_label')}</label>
+                                <select
+                                    value={columnFilters.category}
+                                    onChange={e => setColumnFilters({ ...columnFilters, category: e.target.value })}
+                                    className="filter-select"
+                                >
+                                    <option value="">-- {t('all') || 'Tất cả'} --</option>
+                                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="filter-group">
+                                <label><Warehouse size={14} /> {t('owner_label')}</label>
+                                <select
+                                    value={columnFilters.owner_company}
+                                    onChange={e => setColumnFilters({ ...columnFilters, owner_company: e.target.value })}
+                                    className="filter-select"
+                                >
+                                    <option value="">-- {t('all')} --</option>
+                                    {[...new Set(items.map(i => i.owner_company))].filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div className="filter-group">
+                                <label><Monitor size={14} /> {t('status')}</label>
+                                <select
+                                    value={columnFilters.status}
+                                    onChange={e => setColumnFilters({ ...columnFilters, status: e.target.value })}
+                                    className="filter-select"
+                                >
+                                    <option value="">-- {t('all')} --</option>
+                                    <option value="OK">OK</option>
+                                    <option value="NG">NG</option>
+                                </select>
+                            </div>
+                            <div className="filter-group">
+                                <label><MapPin size={14} /> {t('location')}</label>
+                                <select
+                                    value={columnFilters.is_at_hse}
+                                    onChange={e => setColumnFilters({ ...columnFilters, is_at_hse: e.target.value })}
+                                    className="filter-select"
+                                >
+                                    <option value="">-- {t('all')} --</option>
+                                    <option value="1">{t('at_hse')}</option>
+                                    <option value="0">{t('outside')}</option>
+                                </select>
+                            </div>
+                            <div className="filter-group">
+                                <label><History size={14} /> Chuyền/Line</label>
+                                <select
+                                    value={columnFilters.line_name}
+                                    onChange={e => setColumnFilters({ ...columnFilters, line_name: e.target.value })}
+                                    className="filter-select"
+                                >
+                                    <option value="">-- {t('all')} --</option>
+                                    {[...new Set(items.map(i => i.line_name))].filter(Boolean).map(l => <option key={l} value={l}>{l}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        {(searchTerm || Object.values(columnFilters).some(v => v !== '')) && (
+                            <button className="clear-btn" onClick={resetFilters} style={{ alignSelf: 'flex-end', height: '42px' }}>
+                                <X size={16} /> {t('clear_filters')}
+                            </button>
+                        )}
                     </div>
 
                     {scanning && (
@@ -655,61 +750,7 @@ const Equipment = () => {
                             <th>{t('actions')}</th>
                         </tr>
                         <tr style={{ background: '#f8fafc' }}>
-                            <th colSpan="3"></th>
-                            <th>
-                                <div style={{ display: 'flex', gap: '4px' }}>
-                                    <select
-                                        value={columnFilters.category}
-                                        onChange={e => setColumnFilters({ ...columnFilters, category: e.target.value })}
-                                        style={{ fontSize: '10px', padding: '2px', border: '1px solid #cbd5e1', width: '50%' }}
-                                    >
-                                        <option value="">Loại...</option>
-                                        {[...new Set(items.map(i => i.category))].filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                    <select
-                                        value={columnFilters.owner_company}
-                                        onChange={e => setColumnFilters({ ...columnFilters, owner_company: e.target.value })}
-                                        style={{ fontSize: '10px', padding: '2px', border: '1px solid #cbd5e1', width: '50%' }}
-                                    >
-                                        <option value="">Cty...</option>
-                                        {[...new Set(items.map(i => i.owner_company))].filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
-                            </th>
-                            <th></th>
-                            <th>
-                                <select
-                                    value={columnFilters.status}
-                                    onChange={e => setColumnFilters({ ...columnFilters, status: e.target.value })}
-                                    style={{ fontSize: '10px', padding: '2px', border: '1px solid #cbd5e1', width: '100%' }}
-                                >
-                                    <option value="">Status...</option>
-                                    <option value="OK">OK</option>
-                                    <option value="NG">NG</option>
-                                </select>
-                            </th>
-                            <th>
-                                <select
-                                    value={columnFilters.is_at_hse}
-                                    onChange={e => setColumnFilters({ ...columnFilters, is_at_hse: e.target.value })}
-                                    style={{ fontSize: '10px', padding: '2px', border: '1px solid #cbd5e1', width: '100%' }}
-                                >
-                                    <option value="">{t('location')}...</option>
-                                    <option value="1">{t('at_hse')}</option>
-                                    <option value="0">{t('outside')}</option>
-                                </select>
-                            </th>
-                            <th>
-                                <select
-                                    value={columnFilters.line_name}
-                                    onChange={e => setColumnFilters({ ...columnFilters, line_name: e.target.value })}
-                                    style={{ fontSize: '10px', padding: '2px', border: '1px solid #cbd5e1', width: '100%' }}
-                                >
-                                    <option value="">Line...</option>
-                                    {[...new Set(items.map(i => i.line_name))].filter(Boolean).map(l => <option key={l} value={l}>{l}</option>)}
-                                </select>
-                            </th>
-                            <th colSpan="2"></th>
+                            <th colSpan="10"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -730,12 +771,13 @@ const Equipment = () => {
                                         <div style={{ fontWeight: '600', color: '#1e293b' }}>{item.name}</div>
                                     </td>
                                     <td>
-                                        <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#2563eb' }}>{item.category || 'Thiết bị'}</div>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#2563eb' }}>{item.category_name || item.category || '---'}</div>
                                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Owner: <span style={{ color: '#059669', fontWeight: 'bold' }}>{item.owner_company || ''}</span></div>
                                     </td>
                                     <td>
                                         <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#334155', textAlign: 'center' }}>
-                                            {item.current_quantity || 0}
+                                            {item.is_bulk ? (Number(item.current_quantity) || 0) : 1}
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#64748b', marginLeft: '4px' }}>{item.unit || 'ea'}</span>
                                         </div>
                                     </td>
                                     <td>
@@ -854,13 +896,18 @@ const Equipment = () => {
 
                             <div className="form-group">
                                 <label>{t('category_label')}</label>
-                                <input type="text" list="categories" value={newEq.category} onChange={e => setNewEq({ ...newEq, category: e.target.value })} className="input-field" />
-                                <datalist id="categories">
-                                    <option value="Thiết bị" />
-                                    <option value="Jig / Gá" />
-                                    <option value="Vật tư tiêu hao" />
-                                    <option value="Công cụ dụng cụ" />
-                                </datalist>
+                                <select
+                                    className="input-field"
+                                    value={newEq.category_id}
+                                    onChange={e => {
+                                        const selectedId = e.target.value;
+                                        const selectedName = categories.find(c => c.id == selectedId)?.name || '';
+                                        setNewEq({ ...newEq, category_id: selectedId, category: selectedName });
+                                    }}
+                                >
+                                    <option value="">-- {t('select_category') || 'Chọn loại'} --</option>
+                                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
                             </div>
                             <div className="form-group">
                                 <label>Tình trạng thiết bị (OK/NG)</label>
@@ -880,9 +927,34 @@ const Equipment = () => {
                                 </datalist>
                             </div>
                             {newEq.is_bulk && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', gridColumn: 'span 2' }}>
+                                    <div className="form-group">
+                                        <label>{t('initial_quantity')} *</label>
+                                        <input type="number" step="0.0001" value={newEq.current_quantity} onChange={e => setNewEq({ ...newEq, current_quantity: parseFloat(e.target.value) || 0 })} className="input-field" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label>{t('unit')}</label>
+                                        <input type="text" list="units" value={newEq.unit} onChange={e => setNewEq({ ...newEq, unit: e.target.value })} className="input-field" placeholder="ea, kg, m..." />
+                                        <datalist id="units">
+                                            <option value="ea" />
+                                            <option value="kg" />
+                                            <option value="g" />
+                                            <option value="m" />
+                                            <option value="set" />
+                                            <option value="box" />
+                                        </datalist>
+                                    </div>
+                                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                                        <label>{lang === 'vi' ? 'Mức tồn kho tối thiểu (Cảnh báo)' : 'Min Stock (Warning)'}</label>
+                                        <input type="number" step="0.0001" value={newEq.min_stock} onChange={e => setNewEq({ ...newEq, min_stock: parseFloat(e.target.value) || 0 })} className="input-field" style={{ borderColor: '#fca5a5' }} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {!newEq.is_bulk && (
                                 <div className="form-group">
-                                    <label>{t('initial_quantity')} *</label>
-                                    <input type="number" value={newEq.current_quantity} onChange={e => setNewEq({ ...newEq, current_quantity: parseInt(e.target.value) || 0 })} className="input-field" />
+                                    <label>{t('unit')}</label>
+                                    <input type="text" list="units" value={newEq.unit} onChange={e => setNewEq({ ...newEq, unit: e.target.value })} className="input-field" />
                                 </div>
                             )}
 
@@ -930,16 +1002,33 @@ const Equipment = () => {
                                     </div>
 
                                     {newEq.is_calibrated && (
-                                        <>
-                                            <div className="form-group">
-                                                <label>{t('last_calibration_date')}</label>
-                                                <input type="date" value={newEq.last_calibration} onChange={e => setNewEq({ ...newEq, last_calibration: e.target.value })} className="input-field" />
+                                        <div style={{
+                                            gridColumn: 'span 2',
+                                            display: 'grid',
+                                            gridTemplateColumns: '1fr 1fr',
+                                            gap: '1rem',
+                                            background: '#f0fdf4',
+                                            padding: '1.25rem',
+                                            borderRadius: '12px',
+                                            border: '1px solid #bbf7d0',
+                                            marginTop: '0.5rem'
+                                        }}>
+                                            <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <ShieldCheck size={20} color="#16a34a" />
+                                                <span style={{ fontWeight: '800', color: '#166534', fontSize: '0.9rem', textTransform: 'uppercase' }}>{t('calibration_info') || 'Thông tin Hiệu chuẩn'}</span>
                                             </div>
                                             <div className="form-group">
-                                                <label>{t('expiry_date_label')}</label>
-                                                <input type="date" value={newEq.expiry_date} onChange={e => setNewEq({ ...newEq, expiry_date: e.target.value })} className="input-field" />
+                                                <label style={{ color: '#166534', fontWeight: '700' }}>{t('last_calibration_date')}</label>
+                                                <input type="date" value={newEq.last_calibration} onChange={e => setNewEq({ ...newEq, last_calibration: e.target.value })} className="input-field" style={{ border: '1px solid #86efac' }} />
                                             </div>
-                                        </>
+                                            <div className="form-group">
+                                                <label style={{ color: '#166534', fontWeight: '700' }}>{t('expiry_date_label')}</label>
+                                                <input type="date" value={newEq.expiry_date} onChange={e => setNewEq({ ...newEq, expiry_date: e.target.value })} className="input-field" style={{ border: '1px solid #86efac', fontWeight: 'bold', color: '#166534' }} />
+                                            </div>
+                                            <div style={{ gridColumn: 'span 2', fontSize: '0.75rem', color: '#15803d', fontStyle: 'italic', marginTop: '0.25rem' }}>
+                                                * {t('auto_calculation_note') || 'Ngày hết hạn tự động được tính là +1 năm từ ngày hiệu chuẩn.'}
+                                            </div>
+                                        </div>
                                     )}
                                 </>
                             )}
@@ -1080,13 +1169,22 @@ const Equipment = () => {
                 .scan-btn:hover { background: #e2e8f0; color: #1e293b; }
                 .scan-btn.active { background: #6366f1; color: #fff; border-color: #6366f1; }
                 
-                .search-stats { display: flex; align-items: center; gap: 1rem; border-left: 2px solid #e2e8f0; padding-left: 1.5rem; }
+                .search-stats { display: flex; align-items: center; gap: 1rem; border-left: 2px solid #e2e8f0; padding-left: 1.5rem; height: 50px; }
                 .stats-item { display: flex; align-items: baseline; gap: 0.5rem; white-space: nowrap; }
-                .stats-label { font-size: 0.9rem; color: #64748b; font-weight: 600; }
-                .stats-value { font-size: 1.5rem; font-weight: 800; color: #1e293b; }
-                .stats-total { font-size: 0.9rem; color: #94a3b8; font-weight: 600; }
-                .clear-btn { background: #fee2e2; color: #dc2626; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; transition: all 0.2s; white-space: nowrap; }
-                .clear-btn:hover { background: #fecaca; transform: translateY(-1px); }
+                .stats-label { font-size: 0.85rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; }
+                .stats-value { font-size: 1.75rem; font-weight: 900; color: #6366f1; }
+                .stats-total { font-size: 1rem; color: #94a3b8; font-weight: 600; }
+                
+                .filter-dashboard { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #f1f5f9; display: flex; gap: 1rem; align-items: flex-end; }
+                .filter-grid { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+                .filter-group { display: flex; flex-direction: column; gap: 0.5rem; }
+                .filter-group label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+                .filter-select { padding: 0.625rem; border-radius: 10px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 0.9rem; font-weight: 600; color: #1e293b; cursor: pointer; transition: all 0.2s; }
+                .filter-select:hover { border-color: #cbd5e1; background: #fff; }
+                .filter-select:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1); background: #fff; }
+
+                .clear-btn { background: #fff; color: #ef4444; border: 1.5px solid #fee2e2; padding: 0.5rem 1.25rem; border-radius: 10px; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s; white-space: nowrap; }
+                .clear-btn:hover { background: #fef2f2; border-color: #ef4444; transform: translateY(-1px); }
 
                 /* Scanner Viewfinder */
                 .scanner-viewfinder { margin-top: 1rem; border-radius: 16px; overflow: hidden; border: 3px solid #6366f1; position: relative; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }

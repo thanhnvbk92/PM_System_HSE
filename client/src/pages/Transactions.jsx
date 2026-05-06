@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import { ArrowUpRight, ArrowDownLeft, Printer, ScanLine, X, Trash2, Camera, ClipboardList, User, Briefcase, FileText, UserCheck, Download, Search, Zap, Maximize } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, Printer, ScanLine, X, Trash2, Camera, ClipboardList, User, Briefcase, FileText, UserCheck, Download, Search, Zap, Maximize, ShieldCheck } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import Papa from 'papaparse';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +33,10 @@ const Transactions = () => {
     const [zoomValue, setZoomValue] = useState(1);
     const [isTorchOn, setIsTorchOn] = useState(false);
     const scanInputRef = useRef(null);
+
+    // Calibration Modal State
+    const [showCalibModal, setShowCalibModal] = useState(false);
+    const [calibItem, setCalibItem] = useState(null);
 
     const fetchData = async () => {
         const [resTx, resContacts] = await Promise.all([
@@ -95,7 +99,7 @@ const Transactions = () => {
     const triggerSearch = async (codeStr) => {
         if (!codeStr.trim()) return;
         try {
-            const res = await axios.get(`/api/equipment/code/${codeStr}`);
+            const res = await axios.get(`/api/lookup/code/${codeStr}`);
             setSearchResults(res.data);
         } catch (err) {
             if (err.response?.status === 404) {
@@ -205,14 +209,21 @@ const Transactions = () => {
     const confirmAdd = (eq) => {
         // 1. Kiểm tra chống trùng lặp theo Serial/Code
         if (scannedItems.some(i => i.code === eq.code)) {
-            alert(t('duplicate_item'));
+            alert(t('already_in_list') || 'Thiết bị đã có trong danh sách');
             return;
         }
 
-        eq.transact_quantity = 1; // Khởi tạo số lượng mặc định là 1 cho Bulk item
+        const isBulk = eq.is_bulk || eq.item_type === 'spare_part';
+
+        eq.transact_quantity = isBulk ? 1.0000 : 1;
+        eq.transact_unit = eq.unit || 'ea';
+        eq.scrap_weight = 0;
+        eq.scrap_unit = 'kg';
+        eq.last_calibration = '';
+        eq.expiry_date = '';
 
         // 2. Kiểm tra Logic Kho (Ràng buộc Nghiệp vụ mới)
-        if (!eq.is_bulk) {
+        if (!isBulk) {
             if (form.type === 'Export' && !eq.is_at_hse) {
                 alert(t('export_error_outside').replace('{name}', eq.name));
                 return;
@@ -236,14 +247,53 @@ const Transactions = () => {
         if (scanInputRef.current) scanInputRef.current.focus();
     };
 
+    const handleQuickCalibrateItem = (code) => {
+        const today = new Date();
+        const nextYear = new Date();
+        nextYear.setFullYear(today.getFullYear() + 1);
+
+        setScannedItems(scannedItems.map(item => {
+            if (item.code === code) {
+                return {
+                    ...item,
+                    last_calibration: today.toISOString().split('T')[0],
+                    expiry_date: nextYear.toISOString().split('T')[0]
+                };
+            }
+            return item;
+        }));
+    };
+
+    const handleCalibrationChange = (code, field, value) => {
+        setScannedItems(scannedItems.map(item => {
+            if (item.code === code) {
+                let updatedItem = { ...item, [field]: value };
+                if (field === 'last_calibration' && value) {
+                    const calDate = new Date(value);
+                    if (!isNaN(calDate.getTime())) {
+                        const nextDate = new Date(calDate);
+                        nextDate.setFullYear(calDate.getFullYear() + 1);
+                        updatedItem.expiry_date = nextDate.toISOString().split('T')[0];
+                    }
+                }
+                return updatedItem;
+            }
+            return item;
+        }));
+    };
+
     const removeScanned = (code) => {
         setScannedItems(scannedItems.filter(i => i.code !== code));
         if (scanInputRef.current) scanInputRef.current.focus();
     };
 
     const handleQuantityChange = (code, val) => {
-        const num = parseInt(val) || 1;
+        const num = parseFloat(val) || 0;
         setScannedItems(scannedItems.map(item => item.code === code ? { ...item, transact_quantity: num } : item));
+    };
+
+    const handleScrapChange = (code, field, val) => {
+        setScannedItems(scannedItems.map(item => item.code === code ? { ...item, [field]: val } : item));
     };
 
     const handlePrintLabel = (item) => {
@@ -322,6 +372,34 @@ const Transactions = () => {
         }
     };
 
+    const handleSaveItemCalibration = (e) => {
+        e.preventDefault();
+        setScannedItems(scannedItems.map(item => {
+            if (item.code === calibItem.code) {
+                return {
+                    ...item,
+                    last_calibration: calibItem.last_calibration,
+                    expiry_date: calibItem.expiry_date
+                };
+            }
+            return item;
+        }));
+        setShowCalibModal(false);
+    };
+
+    const handleCalibModalChange = (field, value) => {
+        let updated = { ...calibItem, [field]: value };
+        if (field === 'last_calibration' && value) {
+            const calDate = new Date(value);
+            if (!isNaN(calDate.getTime())) {
+                const nextDate = new Date(calDate);
+                nextDate.setFullYear(calDate.getFullYear() + 1);
+                updated.expiry_date = nextDate.toISOString().split('T')[0];
+            }
+        }
+        setCalibItem(updated);
+    };
+
     const handleDeleteLog = async (id) => {
         if (!window.confirm(t('confirm_delete_log') || 'Xác nhận xóa dòng lịch sử này? Trạng thái thiết bị sẽ được khôi phục.')) return;
         try {
@@ -343,8 +421,19 @@ const Transactions = () => {
         }
 
         const payload = {
-            items: scannedItems.map(i => ({ id: i.id, quantity: i.transact_quantity, is_bulk: i.is_bulk })),
+            items: scannedItems.map(i => ({
+                id: i.id,
+                quantity: i.transact_quantity,
+                is_bulk: i.is_bulk || i.item_type === 'spare_part',
+                item_type: i.item_type || 'equipment',
+                unit: i.transact_unit || i.unit,
+                scrap_weight: i.scrap_weight || 0,
+                scrap_unit: i.scrap_unit || 'kg',
+                last_calibration: i.last_calibration,
+                expiry_date: i.expiry_date
+            })),
             type: form.type,
+            is_internal: form.is_internal || false,
             person_in_charge: form.person_in_charge,
             department: form.department,
             notes: form.notes,
@@ -397,9 +486,9 @@ const Transactions = () => {
                   <td style="text-align: center; vertical-align: middle; padding: 5px;">
                     ${l.image_url ? `<img src="${window.location.origin}${l.image_url}" style="max-height: 80px; max-width: 100%; object-fit: contain;" />` : '---'}
                   </td> 
-                  <td style="text-align: center;">ea</td>
-                  <td style="text-align: center;"><b>${l.quantity}</b></td>
-                  <td>${l.equipment_status || '---'}</td>
+                  <td style="text-align: center;">${l.unit || 'ea'}</td>
+                  <td style="text-align: center;"><b>${Number(l.quantity)}</b></td>
+                  <td>${l.type === 'Scrap' ? `[Scrap: ${Number(l.scrap_weight)} ${l.scrap_unit}]` : (l.equipment_status || '---')}</td>
                 </tr>
             `;
         });
@@ -426,7 +515,7 @@ const Transactions = () => {
         </head>
         <body>
           <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 20px;">
-              <img src="/logo.png" alt="Logo" style="height: 60px; position: absolute; left: 0; top: 0;" />
+              <img src="/hse_logo.png" alt="Logo" style="height: 60px; position: absolute; left: 0; top: 0;" />
               <div>
                   <div class="header-title">BIÊN BẢN BÀN GIAO DỤNG CỤ, THIẾT BỊ & TÀI SẢN</div>
                   <div class="header-subtitle" style="margin-bottom: 0;">Handover Tool, Equipment & Fix asset</div>
@@ -479,7 +568,7 @@ const Transactions = () => {
                 ${trHtml}
                 <tr>
                   <td colspan="6" style="text-align: center; font-weight: bold; padding: 8px;">TOTAL</td>
-                  <td style="text-align: center; font-weight: bold;">${totalQty}</td>
+                  <td style="text-align: center; font-weight: bold;">${Number(totalQty)}</td>
                   <td></td>
                 </tr>
               </tbody>
@@ -536,9 +625,9 @@ const Transactions = () => {
                 <tr style="font-size: 12px;">
                   <td style="text-align: center; height: 20px;">${l.equipment_name}</td>
                   <td style="text-align: center;">${l.serial_no || '---'}</td>
-                  <td style="text-align: center;">ea</td>
-                  <td style="text-align: center;"><b>${l.quantity}</b></td>
-                  <td></td>
+                  <td style="text-align: center;">${l.unit || 'ea'}</td>
+                  <td style="text-align: center;"><b>${Number(l.quantity)}</b></td>
+                  <td>${l.type === 'Scrap' ? `Scrap: ${Number(l.scrap_weight)} ${l.scrap_unit}` : ''}</td>
                 </tr>
             `;
         });
@@ -557,9 +646,9 @@ const Transactions = () => {
             .so-dk { text-align: right; font-weight: bold; margin-bottom: 10px; font-size: 12px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: fixed; }
             th, td { border: 1px solid #000; padding: 4px; text-align: center; vertical-align: middle; }
-            .sign-table td { height: 60px; }
+            .sign-table td { height: 100px; }
             .final-sign { margin-top: 30px; }
-            .final-sign td { height: 80px; }
+            .final-sign td { height: 100px; }
             
             th .vi { display: block; font-size: 13px; font-weight: bold; margin-bottom: 2px; }
             th .en { display: block; font-size: 11px; font-weight: normal; font-style: italic; color: #4b5563; }
@@ -568,7 +657,7 @@ const Transactions = () => {
         <body>
           <div class="header-info">
              <div class="company-name" style="display: flex; align-items: center; gap: 8px;">
-                 <img src="/logo.png" alt="Logo" style="height: 35px;" />
+                 <img src="/hse_logo.png" alt="Logo" style="height: 35px;" />
                  <span>Haengsung Electronics Vietnam Co.,Ltd</span>
              </div>
              <div style="text-align: center;">
@@ -625,7 +714,7 @@ const Transactions = () => {
               ${trHtml}
               <tr>
                  <td colspan="3" style="text-align: center; font-weight: bold; background: #fafafa;">Total</td>
-                 <td style="font-weight: bold;">${totalQty}</td>
+                 <td style="font-weight: bold;">${Number(totalQty)}</td>
                  <td style="background: #fafafa;"></td>
               </tr>
             </tbody>
@@ -683,8 +772,8 @@ const Transactions = () => {
                 <tr>
                   <td style="text-align: center;">${index + 1}</td>
                   <td style="text-align: left; padding-left: 5px;">${l.equipment_name}</td>
-                  <td style="text-align: center;">${l.quantity}</td>
-                  <td style="text-align: center;">${mãHàngHóa}</td>
+                  <td style="text-align: center;">${Number(l.quantity)} ${l.unit || 'ea'}</td>
+                  <td style="text-align: center;">${mãHàngHóa} ${l.type === 'Scrap' ? `(Scrap: ${Number(l.scrap_weight)}${l.scrap_unit})` : ''}</td>
                 </tr>
             `;
         });
@@ -746,9 +835,9 @@ const Transactions = () => {
                         <thead>
                             <tr>
                                 <th style="width: 7%;">STT</th>
-                                <th style="width: 45%;">Tên hàng hoá<br/><i>(Item)</i></th>
-                                <th style="width: 18%;">Số lượng<br/><i>(Quantity)</i></th>
-                                <th style="width: 30%;">Mã hàng hoá <br/><i>(S/N, P/N, No..)</i></th>
+                                <th style="width: 52%;">Tên hàng hoá<br/><i>(Item)</i></th>
+                                <th style="width: 15%;">Số lượng<br/><i>(Quantity)</i></th>
+                                <th style="width: 25%;">Mã hàng hoá <br/><i>(S/N, P/N, No..)</i></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -791,8 +880,8 @@ const Transactions = () => {
                 <style>
                     @page { size: A4 landscape; margin: 10px 35px 0 35px; }
                     * { box-sizing: border-box; }
-                    body { font-family: "Cambria", serif; font-size: 15px; margin: 0; display: flex; justify-content: center; background: #fff; gap: 40px; }
-                    .form-wrapper { width: 48%; display: flex; flex-direction: column; align-items: stretch; break-inside: avoid; page-break-inside: avoid; }
+                    body { font-family: "Cambria", serif; font-size: 15px; margin: 0; display: flex; justify-content: center; background: #fff; gap: 20px; flex-wrap: nowrap; overflow: hidden; }
+                    .form-wrapper { width: 47%; display: flex; flex-direction: column; align-items: stretch; break-inside: avoid; page-break-inside: avoid; }
                     .form-container { width: 100%; border: 3px solid #000; display: flex; flex-direction: column; background: #fff; position: relative; }
                     
                     .form-header { display: flex; border-bottom: 1px solid #000; }
@@ -843,13 +932,25 @@ const Transactions = () => {
                     .logo-area img { height: 35px; scale: 0.8; }
                     .bw-logo { filter: grayscale(100%) contrast(1.2) brightness(0.85); }
                     
+                    .vertical-line {
+                        position: fixed;
+                        left: 50%;
+                        top: 0;
+                        bottom: 0;
+                        width: 0;
+                        border-left: 1px dashed #000;
+                        z-index: 10;
+                    }
+
                     @media print {
                         body { padding: 0; margin: 0; padding-top: 5mm; }
-                        .form-wrapper { width: 48%; }
+                        .form-wrapper { width: 47%; }
+                        .vertical-line { display: block; }
                     }
                 </style>
             </head>
             <body>
+                <div class="vertical-line"></div>
                 ${singleFormHtml('1')}
                 ${singleFormHtml('2')}
                 <script>
@@ -994,6 +1095,13 @@ const Transactions = () => {
                     }}>
                         <ArrowUpRight size={18} /> {t('export')}
                     </button>
+                    <button className="btn" style={{ backgroundColor: '#64748b', color: 'white' }} onClick={() => {
+                        setForm({ ...form, type: 'Scrap' });
+                        setScannedItems([]);
+                        setShowModal(true);
+                    }}>
+                        <Trash2 size={18} /> {t('scrap') || 'Xuất phế'}
+                    </button>
                 </div>
             </div>
 
@@ -1082,8 +1190,14 @@ const Transactions = () => {
                                             ) : '---'}
                                         </td>
                                         <td>
-                                            <span style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', background: b.type === 'Import' ? '#dcfce7' : '#fee2e2', color: b.type === 'Import' ? '#166534' : '#991b1b', fontWeight: 'bold' }}>
-                                                {b.type === 'Import' ? t('import').toUpperCase() : t('export').toUpperCase()}
+                                            <span style={{
+                                                padding: '0.25rem 0.5rem',
+                                                borderRadius: '4px',
+                                                background: b.type === 'Import' ? '#dcfce7' : (b.type === 'Scrap' ? '#f1f5f9' : '#fee2e2'),
+                                                color: b.type === 'Import' ? '#166534' : (b.type === 'Scrap' ? '#475569' : '#991b1b'),
+                                                fontWeight: 'bold'
+                                            }}>
+                                                {b.type === 'Import' ? t('import').toUpperCase() : (b.type === 'Scrap' ? t('scrap').toUpperCase() : t('export').toUpperCase())}
                                             </span>
                                         </td>
                                         <td style={{ fontWeight: 600 }}>{b.sample_log.sender_name || (b.type === 'Import' ? b.related_person : b.person_in_charge) || '---'}</td>
@@ -1229,8 +1343,8 @@ const Transactions = () => {
                                             ) : '---'}
                                         </td>
                                         <td>
-                                            <span style={{ color: log.type === 'Import' ? '#166534' : '#991b1b', fontWeight: 'bold' }}>
-                                                {log.type === 'Import' ? t('import') : t('export')}
+                                            <span style={{ color: log.type === 'Import' ? '#166534' : (log.type === 'Scrap' ? '#475569' : '#991b1b'), fontWeight: 'bold' }}>
+                                                {log.type === 'Import' ? t('import') : (log.type === 'Scrap' ? t('scrap') : t('export'))}
                                             </span>
                                         </td>
                                         <td>
@@ -1246,7 +1360,14 @@ const Transactions = () => {
                                                 {log.part_no && <span> | P/N: <span style={{ color: '#059669', fontWeight: '500' }}>{log.part_no}</span></span>}
                                             </div>
                                         </td>
-                                        <td><span style={{ fontWeight: 'bold' }}>x{log.quantity}</span></td>
+                                        <td>
+                                            <span style={{ fontWeight: 'bold' }}>{Number(log.quantity)} {log.unit || 'ea'}</span>
+                                            {log.type === 'Scrap' && log.scrap_weight > 0 && (
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                                    ({Number(log.scrap_weight)} {log.scrap_unit})
+                                                </div>
+                                            )}
+                                        </td>
                                         <td>{log.sender_name || (log.type === 'Import' ? (log.related_person || '---') : log.person_in_charge)}</td>
                                         <td>{log.receiver_name || (log.type === 'Import' ? log.person_in_charge : (log.related_person || '---'))}</td>
                                         <td>{log.purpose || '---'}</td>
@@ -1281,6 +1402,23 @@ const Transactions = () => {
                                 <ScanLine size={24} color={form.type === 'Import' ? '#22c55e' : '#ec4899'} />
                                 {form.type === 'Import' ? t('scan_import') : t('scan_export')}
                             </h2>
+                            {form.type === 'Export' && (
+                                <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                    <input
+                                        type="checkbox"
+                                        id="is_internal"
+                                        checked={form.is_internal || false}
+                                        onChange={e => setForm({ ...form, is_internal: e.target.checked })}
+                                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="is_internal" style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#1e293b', cursor: 'pointer' }}>
+                                        {lang === 'vi' ? 'XUẤT NỘI BỘ (Internal Export)' : 'INTERNAL EXPORT'}
+                                    </label>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                        {lang === 'vi' ? '* Không đổi trạng thái At HSE' : '* Keep At HSE status'}
+                                    </div>
+                                </div>
+                            )}
                             <p style={{ color: '#64748b', marginBottom: '1rem', fontSize: '0.9rem' }}>
                                 {t('scan_instruction')}
                             </p>
@@ -1290,7 +1428,7 @@ const Transactions = () => {
                                     <input
                                         ref={scanInputRef}
                                         type="text"
-                                        placeholder={t('scan_placeholder')}
+                                        placeholder={lang === 'vi' ? "Quét mã hoặc nhập Tên, S/N, P/N..." : "Scan or enter Name, S/N, P/N..."}
                                         value={scanCode}
                                         onChange={e => setScanCode(e.target.value)}
                                         className="input-field"
@@ -1399,8 +1537,42 @@ const Transactions = () => {
                                                     {item.serial_no && <div style={{ fontSize: '0.75rem', color: '#64748b' }}>S/N: {item.serial_no}</div>}
                                                 </td>
                                                 <td>
-                                                    {item.is_bulk ? (
-                                                        <span className="badge" style={{ background: '#f3e8ff', color: '#7e22ce' }}>{t('stock')}: {item.current_quantity}</span>
+                                                    {item.is_bulk || form.type === 'Scrap' ? (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.0001"
+                                                                    min="0.0001"
+                                                                    value={item.transact_quantity}
+                                                                    onChange={(e) => handleQuantityChange(item.code, e.target.value)}
+                                                                    style={{ width: '80px', padding: '0.2rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                                />
+                                                                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{item.unit || item.transact_unit || 'ea'}</span>
+                                                            </div>
+                                                            {form.type === 'Scrap' && (
+                                                                <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                    <div style={{ fontSize: '0.7rem', color: '#1e293b', fontWeight: 'bold' }}>{t('scrap_weight')}</div>
+                                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.0001"
+                                                                            placeholder="kg"
+                                                                            value={item.scrap_weight}
+                                                                            onChange={(e) => handleScrapChange(item.code, 'scrap_weight', parseFloat(e.target.value) || 0)}
+                                                                            style={{ width: '60px', padding: '0.2rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                                        />
+                                                                        <input
+                                                                            type="text"
+                                                                            placeholder="unit"
+                                                                            value={item.scrap_unit}
+                                                                            onChange={(e) => handleScrapChange(item.code, 'scrap_unit', e.target.value)}
+                                                                            style={{ width: '40px', padding: '0.2rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     ) : (
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                             <span className="badge" style={{ background: item.status === 'OK' ? '#dcfce7' : '#fee2e2', color: item.status === 'OK' ? '#166534' : '#991b1b' }}>
@@ -1409,12 +1581,60 @@ const Transactions = () => {
                                                             <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: item.is_at_hse ? '#059669' : '#d97706' }}>
                                                                 {item.is_at_hse ? t('at_hse') : t('outside')}
                                                             </span>
+                                                            {form.type === 'Import' && item.is_calibrated && (
+                                                                <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn"
+                                                                        onClick={() => {
+                                                                            setCalibItem({
+                                                                                code: item.code,
+                                                                                name: item.name,
+                                                                                serial_no: item.serial_no,
+                                                                                last_calibration: item.last_calibration,
+                                                                                expiry_date: item.expiry_date
+                                                                            });
+                                                                            setShowCalibModal(true);
+                                                                        }}
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            fontSize: '0.7rem',
+                                                                            padding: '4px 8px',
+                                                                            background: item.last_calibration ? '#dcfce7' : '#f0fdf4',
+                                                                            color: '#166534',
+                                                                            border: item.last_calibration ? '1px solid #86efac' : '1px solid #bbf7d0',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'center',
+                                                                            gap: '4px',
+                                                                            fontWeight: '600'
+                                                                        }}
+                                                                    >
+                                                                        {item.last_calibration ? '✅ ' : '🛡️ '}
+                                                                        {t('update_calibration') || 'Cập nhật HC'}
+                                                                    </button>
+                                                                    {item.last_calibration && (
+                                                                        <div style={{
+                                                                            fontSize: '0.65rem',
+                                                                            color: '#15803d',
+                                                                            background: '#f0fdf4',
+                                                                            padding: '4px',
+                                                                            borderRadius: '4px',
+                                                                            border: '1px dashed #86efac',
+                                                                            textAlign: 'center'
+                                                                        }}>
+                                                                            <div><b>HC:</b> {item.last_calibration}</div>
+                                                                            <div><b>Hạn:</b> {item.expiry_date}</div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </td>
                                                 <td style={{ textAlign: 'center' }}>
-                                                    {item.is_bulk ? (
-                                                        <input type="number" min="1" value={item.transact_quantity} onChange={(e) => handleQuantityChange(item.code, e.target.value)} style={{ width: '60px', padding: '0.2rem', textAlign: 'center', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                                                    {item.is_bulk || form.type === 'Scrap' ? (
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Bulk</span>
                                                     ) : (
                                                         <strong>x1</strong>
                                                     )}
@@ -1589,6 +1809,50 @@ const Transactions = () => {
                     box-shadow: 0 0 10px rgba(0,0,0,0.5);
                 }
             `}</style>
+
+            {showCalibModal && calibItem && (
+                <div className="modal-overlay" style={{ zIndex: 1100 }}>
+                    <div className="modal-content" style={{ maxWidth: '500px', padding: '2rem' }}>
+                        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#166534' }}>
+                            <ShieldCheck size={24} /> {t('update_calibration') || 'Cập nhật Hiệu chuẩn'}
+                        </h2>
+                        <div style={{ margin: '1rem 0', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{calibItem.name}</div>
+                            <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Mã: {calibItem.code} | S/N: {calibItem.serial_no || '---'}</div>
+                        </div>
+
+                        <form onSubmit={handleSaveItemCalibration} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            <div className="form-group">
+                                <label style={{ fontWeight: 'bold', color: '#1e293b' }}>{t('last_calibration_date')}</label>
+                                <input
+                                    type="date"
+                                    value={calibItem.last_calibration || ''}
+                                    onChange={e => handleCalibModalChange('last_calibration', e.target.value)}
+                                    className="input-field"
+                                    required
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontWeight: 'bold', color: '#1e293b' }}>{t('expiry_date_label')}</label>
+                                <input
+                                    type="date"
+                                    value={calibItem.expiry_date || ''}
+                                    onChange={e => handleCalibModalChange('expiry_date', e.target.value)}
+                                    className="input-field"
+                                    style={{ fontWeight: 'bold', color: '#166534', border: '1px solid #86efac' }}
+                                    required
+                                />
+                                <span style={{ fontSize: '0.75rem', color: '#15803d', fontStyle: 'italic' }}>* Tự động tính +1 năm từ ngày hiệu chuẩn</span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                <button type="button" className="btn" style={{ flex: 1 }} onClick={() => setShowCalibModal(false)}>{t('cancel')}</button>
+                                <button type="submit" className="btn btn-primary" style={{ flex: 1, background: '#16a34a' }}>{t('confirm') || 'Xác nhận'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

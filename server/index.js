@@ -333,26 +333,58 @@ app.delete('/api/locations/jigs/:id', adminAuth, async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 4.5. Quản lý Danh mục (New)
+app.get('/api/categories', async (req, res) => {
+    try {
+        const [rows] = await pool.query('SELECT * FROM categories ORDER BY name ASC');
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/categories', adminAuth, async (req, res) => {
+    const { name, description } = req.body;
+    try {
+        const [result] = await pool.query('INSERT INTO categories (name, description) VALUES (?, ?)', [name, description]);
+        res.json({ id: result.insertId, name });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/categories/:id', adminAuth, async (req, res) => {
+    const { name, description } = req.body;
+    try {
+        await pool.query('UPDATE categories SET name = ?, description = ? WHERE id = ?', [name, description, req.params.id]);
+        res.json({ message: 'Category updated' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/categories/:id', adminAuth, async (req, res) => {
+    try {
+        await pool.query('DELETE FROM categories WHERE id = ?', [req.params.id]);
+        res.json({ message: 'Category deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // 5. Quản lý Thiết bị
 app.get('/api/equipment', async (req, res) => {
     const [rows] = await pool.query(`
-        SELECT e.*, j.name as jig_name, s.name as station_name, l.name as line_name 
+        SELECT e.*, j.name as jig_name, s.name as station_name, l.name as line_name, c.name as category_name,
+               s.line_id as line_id, j.station_id as station_id
         FROM equipment e 
         LEFT JOIN jigs j ON e.jig_id = j.id 
         LEFT JOIN stations s ON j.station_id = s.id 
         LEFT JOIN \`lines\` l ON s.line_id = l.id 
+        LEFT JOIN categories c ON e.category_id = c.id
         ORDER BY e.created_at DESC
     `);
     res.json(rows);
 });
 
 app.post('/api/equipment', async (req, res) => {
-    let { code, name, part_no, serial_no, asset_type, category, owner_company, status, jig_id, is_calibrated, expiry_date, last_calibration, image_url, is_bulk, current_quantity } = req.body;
+    let { code, name, part_no, serial_no, asset_type, category, category_id, owner_company, status, jig_id, is_calibrated, expiry_date, last_calibration, image_url, is_bulk, current_quantity, unit, min_stock } = req.body;
 
     if (!code || code.trim() === '') {
         code = 'EQ-' + Date.now().toString().slice(-5);
     }
-    const parsedQty = is_bulk ? (parseInt(current_quantity) || 1) : 1;
     const final_jig_id = (jig_id === '' || jig_id === 0) ? null : jig_id;
     const final_expiry = (expiry_date === '' || expiry_date === null) ? null : expiry_date;
     const final_last_cal = (last_calibration === '' || last_calibration === null) ? null : last_calibration;
@@ -361,16 +393,12 @@ app.post('/api/equipment', async (req, res) => {
         const cleanPN = (part_no || '').trim();
         const cleanSN = (serial_no || '').trim();
 
-        console.log(`[EQUIPMENT] Check duplicate for PN: "${cleanPN}", SN: "${cleanSN}"`);
-
-        // [CHECK DUPLICATE] Part No & Serial No must be unique together
         if (cleanPN && cleanSN) {
             const [existing] = await pool.query(
                 'SELECT * FROM equipment WHERE TRIM(part_no) = ? AND TRIM(serial_no) = ?',
                 [cleanPN, cleanSN]
             );
             if (existing.length > 0) {
-                console.log(`[EQUIPMENT] Duplicate found! ID: ${existing[0].id}, Code: ${existing[0].code}`);
                 return res.status(409).json({
                     error: 'Thiết bị đã tồn tại (Duplicate PN/SN)',
                     existing: existing[0]
@@ -379,27 +407,74 @@ app.post('/api/equipment', async (req, res) => {
         }
 
         const [result] = await pool.query(
-            'INSERT INTO equipment (code, name, part_no, serial_no, asset_type, category, owner_company, status, is_at_hse, jig_id, is_calibrated, expiry_date, last_calibration, image_url, is_bulk, current_quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [code, name, part_no, serial_no, asset_type, category || '', owner_company || '', status || 'OK', 1, final_jig_id, is_calibrated || false, final_expiry, final_last_cal, image_url || '', is_bulk ? 1 : 0, parsedQty]
+            'INSERT INTO equipment (code, name, part_no, serial_no, asset_type, category, category_id, owner_company, status, is_at_hse, jig_id, is_calibrated, expiry_date, last_calibration, image_url, is_bulk, current_quantity, unit, min_stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [code, name, part_no, serial_no, asset_type, category || '', category_id || null, owner_company || '', status || 'OK', 1, final_jig_id, is_calibrated || false, final_expiry, final_last_cal, image_url || '', is_bulk || false, current_quantity || 1.0, unit || 'ea', min_stock || 0.0]
         );
         res.json({ id: result.insertId, code: code });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.put('/api/equipment/:id', async (req, res) => {
-    let { code, name, part_no, serial_no, asset_type, category, owner_company, status, jig_id, is_calibrated, expiry_date, last_calibration, image_url, is_bulk, current_quantity } = req.body;
+    let { code, name, part_no, serial_no, asset_type, category, category_id, owner_company, status, jig_id, is_calibrated, expiry_date, last_calibration, image_url, is_bulk, current_quantity, unit, min_stock } = req.body;
 
     const final_jig_id = (jig_id === '' || jig_id === 0) ? null : jig_id;
     const final_expiry = (expiry_date === '' || expiry_date === null) ? null : expiry_date;
     const final_last_cal = (last_calibration === '' || last_calibration === null) ? null : last_calibration;
-    const final_is_bulk = (is_bulk === true || is_bulk === 1) ? 1 : 0;
 
     try {
         await pool.query(
-            'UPDATE equipment SET code = ?, name = ?, part_no = ?, serial_no = ?, asset_type = ?, category = ?, owner_company = ?, status = ?, jig_id = ?, is_calibrated = ?, expiry_date = ?, last_calibration = ?, image_url = ?, is_bulk = ?, current_quantity = ? WHERE id = ?',
-            [code, name, part_no, serial_no, asset_type, category, owner_company, status, final_jig_id, is_calibrated || false, final_expiry, final_last_cal, image_url, final_is_bulk, current_quantity, req.params.id]
+            'UPDATE equipment SET code = ?, name = ?, part_no = ?, serial_no = ?, asset_type = ?, category = ?, category_id = ?, owner_company = ?, status = ?, jig_id = ?, is_calibrated = ?, expiry_date = ?, last_calibration = ?, image_url = ?, is_bulk = ?, current_quantity = ?, unit = ?, min_stock = ? WHERE id = ?',
+            [code, name, part_no, serial_no, asset_type, category, category_id || null, owner_company, status, final_jig_id, is_calibrated || false, final_expiry, final_last_cal, image_url, is_bulk, current_quantity, unit, min_stock, req.params.id]
         );
         res.json({ message: 'Equipment updated' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 5.1 Quản lý Spare Parts (Mới)
+app.get('/api/spare-parts', async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT sp.*, c.name as category_name
+            FROM spare_parts sp
+            LEFT JOIN categories c ON sp.category_id = c.id
+            ORDER BY sp.created_at DESC
+        `);
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/spare-parts', async (req, res) => {
+    let { code, name, part_no, specification, category_id, unit, current_quantity, min_stock, owner_company, image_url, status } = req.body;
+
+    if (!code || code.trim() === '') {
+        const dateStr = Date.now().toString().slice(-6);
+        code = 'SP-' + dateStr;
+    }
+
+    try {
+        const [result] = await pool.query(
+            'INSERT INTO spare_parts (code, name, part_no, specification, category_id, unit, current_quantity, min_stock, owner_company, image_url, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [code, name, part_no, specification || '', category_id || null, unit || 'ea', parseFloat(current_quantity) || 0, parseFloat(min_stock) || 0, owner_company || 'HSE', image_url || '', status || 'OK']
+        );
+        res.json({ id: result.insertId, code: code });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/spare-parts/:id', async (req, res) => {
+    let { code, name, part_no, specification, category_id, unit, current_quantity, min_stock, owner_company, image_url, status } = req.body;
+    try {
+        await pool.query(
+            'UPDATE spare_parts SET code = ?, name = ?, part_no = ?, specification = ?, category_id = ?, unit = ?, current_quantity = ?, min_stock = ?, owner_company = ?, image_url = ?, status = ? WHERE id = ?',
+            [code, name, part_no, specification, category_id || null, unit, current_quantity, min_stock, owner_company, image_url, status, req.params.id]
+        );
+        res.json({ message: 'Spare Part updated' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/spare-parts/:id', adminAuth, async (req, res) => {
+    try {
+        await pool.query('DELETE FROM spare_parts WHERE id = ?', [req.params.id]);
+        res.json({ message: 'Spare Part deleted' });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -511,70 +586,98 @@ app.get('/api/transactions', async (req, res) => {
 
 // Chỉnh sửa API POST: Nhận mảng thiết bị và validate logic
 app.post('/api/transactions', async (req, res) => {
-    const { items, type, person_in_charge, department, notes, related_person, purpose,
-        sender_name, sender_position, sender_department, sender_company,
-        receiver_name, receiver_position, receiver_department, receiver_company } = req.body;
+    // batch information
+    const { type, person_in_charge, department, notes, related_person, purpose, sender_name, sender_position, sender_department, sender_company, receiver_name, receiver_position, receiver_department, receiver_company, items } = req.body;
 
-    // items is array of { id, quantity, is_bulk } or equipment_ids
-    const equipList = Array.isArray(items) ? items : req.body.equipment_ids?.map(id => ({ id, quantity: 1 }));
+    // items is array of { id, quantity, is_bulk, item_type, unit, scrap_weight, scrap_unit, last_calibration, expiry_date }
+    const equipList = Array.isArray(items) ? items : req.body.equipment_ids?.map(id => ({ id, quantity: 1, item_type: 'equipment' }));
 
     if (!equipList || equipList.length === 0) {
         return res.status(400).json({ error: 'Vui lòng cung cấp danh sách thiết bị cần xử lý' });
     }
 
-    const uniqueIds = [...new Set(equipList.map(i => i.id))];
-    if (uniqueIds.length !== equipList.length) {
-        return res.status(400).json({ error: 'Cảnh báo: Có thiết bị bị trùng lặp trong phiếu yêu cầu' });
-    }
+    const isInternal = req.body.is_internal || false;
 
     // Generate batch code
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const rand = Math.floor(1000 + Math.random() * 9000);
-    const batch_code = `${type === 'Import' ? 'IMP' : 'EXP'}-${dateStr}-${rand}`;
+    let prefix = isInternal ? 'INT' : (type === 'Import' ? 'IMP' : (type === 'Scrap' ? 'SCR' : 'EXP'));
+    const batch_code = `${prefix}-${dateStr}-${rand}`;
 
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
 
         for (let item of equipList) {
-            const eq_id = item.id;
-            const transactQty = parseInt(item.quantity) || parseInt(req.body.quantity) || 1;
+            const item_id = item.id;
+            const transactQty = parseFloat(item.quantity) || parseFloat(req.body.quantity) || 1;
+            const itemType = item.item_type || 'equipment';
 
-            const [eqRows] = await connection.query('SELECT status, is_bulk, current_quantity, is_at_hse FROM equipment WHERE id = ? FOR UPDATE', [eq_id]);
-            if (eqRows.length === 0) throw new Error(`Thiết bị có ID ${eq_id} không tồn tại`);
+            if (itemType === 'spare_part') {
+                const [spRows] = await connection.query('SELECT current_quantity, unit FROM spare_parts WHERE id = ? FOR UPDATE', [item_id]);
+                if (spRows.length === 0) throw new Error(`Linh kiện ID ${item_id} không tồn tại`);
 
-            const eqInfo = eqRows[0];
-            const isBulk = eqInfo.is_bulk;
-
-            if (isBulk) {
-                if (type === 'Export' && eqInfo.current_quantity < transactQty) {
-                    throw new Error(`Thiết bị ID ${eq_id} dư không đủ. Có: ${eqInfo.current_quantity}, Cần: ${transactQty}`);
+                const spInfo = spRows[0];
+                if ((type === 'Export' || type === 'Scrap') && spInfo.current_quantity < transactQty) {
+                    throw new Error(`Linh kiện ID ${item_id} dư không đủ. Có: ${spInfo.current_quantity}, Cần: ${transactQty}`);
                 }
-                let newQty = type === 'Export' ? (eqInfo.current_quantity - transactQty) : (eqInfo.current_quantity + transactQty);
-                // Với bulk, chúng ta coi như luôn "at hse" nếu > 0, hoặc có thể logic khác tùy yêu cầu.
-                // Ở đây ta giữ nguyên logic quantity.
-                await connection.query('UPDATE equipment SET current_quantity = ? WHERE id = ?', [newQty, eq_id]);
+
+                let newQty = (type === 'Export' || type === 'Scrap') ? (spInfo.current_quantity - transactQty) : (spInfo.current_quantity + transactQty);
+                await connection.query('UPDATE spare_parts SET current_quantity = ? WHERE id = ?', [newQty, item_id]);
+
+                await connection.query(
+                    'INSERT INTO transactions (spare_part_id, type, quantity, unit, person_in_charge, department, notes, related_person, batch_code, purpose, sender_name, sender_position, sender_department, sender_company, receiver_name, receiver_position, receiver_department, receiver_company, scrap_weight, scrap_unit, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [item_id, type, transactQty, item.unit || spInfo.unit || 'ea', person_in_charge || '', department || '', notes || '', related_person || '', batch_code, purpose || '',
+                        sender_name || '', sender_position || '', sender_department || '', sender_company || '',
+                        receiver_name || '', receiver_position || '', receiver_department || '', receiver_company || '',
+                        item.scrap_weight || 0, item.scrap_unit || 'kg', isInternal]
+                );
             } else {
-                if (type === 'Export' && eqInfo.is_at_hse === 0) {
-                    throw new Error(`Lỗi: Thiết bị ID ${eq_id} đang ở ngoài (Outside), không thể xuất thêm`);
-                }
-                if (type === 'Import' && eqInfo.is_at_hse === 1) {
-                    throw new Error(`Lỗi: Thiết bị ID ${eq_id} đang trong kho (HSE), không thể nhập thêm`);
-                }
-                let newAtHse = type === 'Export' ? 0 : 1;
-                await connection.query('UPDATE equipment SET is_at_hse = ? WHERE id = ?', [newAtHse, eq_id]);
-            }
+                const [eqRows] = await connection.query('SELECT status, is_at_hse, current_quantity, unit FROM equipment WHERE id = ? FOR UPDATE', [item_id]);
+                if (eqRows.length === 0) throw new Error(`Thiết bị có ID ${item_id} không tồn tại`);
 
-            await connection.query(
-                'INSERT INTO transactions (equipment_id, type, quantity, person_in_charge, department, notes, related_person, batch_code, purpose, sender_name, sender_position, sender_department, sender_company, receiver_name, receiver_position, receiver_department, receiver_company) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [eq_id, type, transactQty, person_in_charge || '', department || '', notes || '', related_person || '', batch_code, purpose || '',
-                    sender_name || '', sender_position || '', sender_department || '', sender_company || '',
-                    receiver_name || '', receiver_position || '', receiver_department || '', receiver_company || '']
-            );
+                const eqInfo = eqRows[0];
+
+                if (eqInfo.is_bulk) {
+                    if ((type === 'Export' || type === 'Scrap') && eqInfo.current_quantity < transactQty) {
+                        throw new Error(`Thiết bị (Bulk) ID ${item_id} dư không đủ. Có: ${eqInfo.current_quantity}, Cần: ${transactQty}`);
+                    }
+                    let newQty = (type === 'Export' || type === 'Scrap') ? (eqInfo.current_quantity - transactQty) : (eqInfo.current_quantity + transactQty);
+                    await connection.query('UPDATE equipment SET current_quantity = ? WHERE id = ?', [newQty, item_id]);
+                } else {
+                    if (type === 'Export' && !isInternal && eqInfo.is_at_hse === 0) {
+                        throw new Error(`Lỗi: Thiết bị ID ${item_id} đang ở ngoài (Outside), không thể xuất thêm`);
+                    }
+                    if (type === 'Import' && eqInfo.is_at_hse === 1) {
+                        throw new Error(`Lỗi: Thiết bị ID ${item_id} đang trong kho (HSE), không thể nhập thêm`);
+                    }
+
+                    if (!isInternal) {
+                        let newAtHse = type === 'Export' ? 0 : 1;
+                        await connection.query('UPDATE equipment SET is_at_hse = ? WHERE id = ?', [newAtHse, item_id]);
+                    }
+                }
+
+                if (type === 'Import' && item.last_calibration && item.expiry_date) {
+                    await connection.query('UPDATE equipment SET last_calibration = ?, expiry_date = ? WHERE id = ?', [item.last_calibration, item.expiry_date, item_id]);
+                    await connection.query(
+                        'INSERT INTO calibrations (equipment_id, calibration_date, result, technician, notes, next_due_date) VALUES (?, ?, ?, ?, ?, ?)',
+                        [item_id, item.last_calibration, 'Passed', person_in_charge || '', 'Cập nhật tự động khi nhập kho', item.expiry_date]
+                    );
+                }
+
+                await connection.query(
+                    'INSERT INTO transactions (equipment_id, type, quantity, unit, person_in_charge, department, notes, related_person, batch_code, purpose, sender_name, sender_position, sender_department, sender_company, receiver_name, receiver_position, receiver_department, receiver_company, scrap_weight, scrap_unit, is_internal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [item_id, type, transactQty, item.unit || eqInfo.unit || 'ea', person_in_charge || '', department || '', notes || '', related_person || '', batch_code, purpose || '',
+                        sender_name || '', sender_position || '', sender_department || '', sender_company || '',
+                        receiver_name || '', receiver_position || '', receiver_department || '', receiver_company || '',
+                        item.scrap_weight || 0, item.scrap_unit || 'kg', isInternal]
+                );
+            }
         }
 
         await connection.commit();
-        res.json({ message: 'Lưu phiếu giao dịch thành công!' });
+        res.json({ message: 'Lưu phiếu giao dịch thành công!', batch_code });
     } catch (e) {
         await connection.rollback();
         res.status(500).json({ error: e.message });
@@ -582,6 +685,38 @@ app.post('/api/transactions', async (req, res) => {
         connection.release();
     }
 });
+
+app.get('/api/lookup/code/:code', async (req, res) => {
+    const { code } = req.params;
+    const searchPattern = `%${code}%`;
+    try {
+        // Search equipment by multiple fields
+        const [eqRows] = await pool.query(`
+            SELECT *, "equipment" as item_type 
+            FROM equipment 
+            WHERE code = ? OR serial_no = ? OR part_no = ? OR name LIKE ?
+        `, [code, code, code, searchPattern]);
+
+        // Search spare parts by multiple fields
+        const [spRows] = await pool.query(`
+            SELECT *, "spare_part" as item_type 
+            FROM spare_parts 
+            WHERE code = ? OR part_no = ? OR name LIKE ?
+        `, [code, code, searchPattern]);
+
+        // Combine results
+        const combined = [...eqRows, ...spRows];
+
+        if (combined.length === 0) {
+            return res.status(404).json({ error: 'Không tìm thấy thiết bị hoặc linh kiện nào' });
+        }
+
+        res.json(combined);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 
 app.post('/api/transactions/evidence', authMiddleware, upload.single('file'), async (req, res) => {
     const { batch_code, type } = req.body;

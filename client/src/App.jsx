@@ -15,7 +15,13 @@ import {
     User,
     Lock,
     Info,
-    Shield
+    Shield,
+    Layers,
+    Wrench,
+    ChevronDown,
+    ChevronRight,
+    ShoppingCart,
+    Clock
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -27,22 +33,51 @@ import Transactions from './pages/Transactions';
 import Calibrations from './pages/Calibrations';
 import LocationManager from './pages/LocationManager';
 import UserManagement from './pages/UserManagement';
+import CategoryManager from './pages/CategoryManager';
+import SpareParts from './pages/SpareParts';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import './index.css';
 
-const SidebarItem = ({ to, icon: Icon, labelKey }) => {
+const SidebarItem = ({ to, icon: Icon, labelKey, isSubItem = false }) => {
     const location = useLocation();
     const { t } = useLanguage();
     const isActive = location.pathname === to;
 
     return (
-        <Link to={to} className={`nav-item ${isActive ? 'active' : ''}`}>
+        <Link to={to} className={`nav-item ${isActive ? 'active' : ''} ${isSubItem ? 'sub-item' : ''}`}>
             <div className="nav-item-content">
-                <Icon size={20} className="nav-item-icon" />
+                <Icon size={isSubItem ? 16 : 20} className="nav-item-icon" />
                 <span className="nav-item-label">{t(labelKey)}</span>
             </div>
         </Link>
+    );
+};
+
+const SidebarGroup = ({ labelKey, icon: Icon, children, defaultOpen = false }) => {
+    const [isOpen, setIsOpen] = React.useState(defaultOpen);
+    const { t } = useLanguage();
+    const location = useLocation();
+
+    // Tự động mở Group nếu có submenu đang active
+    React.useEffect(() => {
+        const hasActiveChild = React.Children.toArray(children).some(
+            child => child.props.to === location.pathname
+        );
+        if (hasActiveChild) setIsOpen(true);
+    }, [location.pathname, children]);
+
+    return (
+        <div className={`nav-group ${isOpen ? 'open' : ''}`}>
+            <div className="nav-group-header" onClick={() => setIsOpen(!isOpen)}>
+                <div className="nav-item-content">
+                    <Icon size={20} className="nav-item-icon" />
+                    <span className="nav-item-label">{t(labelKey)}</span>
+                </div>
+                {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </div>
+            {isOpen && <div className="nav-group-children">{children}</div>}
+        </div>
     );
 };
 
@@ -269,20 +304,27 @@ const MainLayout = ({ children }) => {
 
                 <nav className="sidebar-nav">
                     <SidebarItem to="/" icon={LayoutDashboard} labelKey="dashboard" />
-                    <SidebarItem to="/equipment" icon={Package} labelKey="equipment" />
-                    <SidebarItem to="/transactions" icon={ArrowLeftRight} labelKey="transactions" />
-                    <SidebarItem to="/calibrations" icon={ShieldCheck} labelKey="calibrations" />
 
-                    {user?.role === 'admin' && (
-                        <>
-                            <div className="sidebar-group-label">{t('admin_group')}</div>
-                            <SidebarItem to="/locations" icon={MapPin} labelKey="locations" />
-                            <SidebarItem to="/users" icon={Users} labelKey="users" />
-                        </>
-                    )}
+                    <SidebarGroup labelKey="equipment" icon={Package}>
+                        <SidebarItem to="/equipment" icon={Layers} labelKey="manage_equipment" isSubItem />
+                        <SidebarItem to="/transactions" icon={ArrowLeftRight} labelKey="transactions" isSubItem />
+                        <SidebarItem to="/calibrations" icon={ShieldCheck} labelKey="calibrations" isSubItem />
+                    </SidebarGroup>
+
+                    <SidebarGroup labelKey="spare_parts" icon={Wrench}>
+                        <SidebarItem to="/spare-parts" icon={Package} labelKey="manage_spare_parts" isSubItem />
+                        <SidebarItem to="/orders/history" icon={Clock} labelKey="order_history" isSubItem />
+                        <SidebarItem to="/orders/progress" icon={ShoppingCart} labelKey="order_progress" isSubItem />
+                    </SidebarGroup>
+
+                    <SidebarGroup labelKey="admin_group" icon={Shield} defaultOpen={user?.role === 'admin'}>
+                        <SidebarItem to="/locations" icon={MapPin} labelKey="locations" isSubItem />
+                        <SidebarItem to="/categories" icon={Layers} labelKey="categories" isSubItem />
+                        <SidebarItem to="/users" icon={Users} labelKey="users" isSubItem />
+                        <SidebarItem to="/settings" icon={Settings} labelKey="settings" isSubItem />
+                    </SidebarGroup>
 
                     <div className="sidebar-footer">
-                        <SidebarItem to="/settings" icon={Settings} labelKey="settings" />
                         <button onClick={logout} className="nav-item nav-logout">
                             <div className="nav-item-content">
                                 <LogOut size={20} className="nav-item-icon" />
@@ -416,11 +458,17 @@ const App = () => {
                     <Route path="/" element={<PrivateRoute><MainLayout><Dashboard /></MainLayout></PrivateRoute>} />
                     <Route path="/equipment" element={<PrivateRoute><MainLayout><Equipment /></MainLayout></PrivateRoute>} />
                     <Route path="/transactions" element={<PrivateRoute><MainLayout><Transactions /></MainLayout></PrivateRoute>} />
+                    <Route path="/spare-parts" element={<PrivateRoute><MainLayout><SpareParts /></MainLayout></PrivateRoute>} />
                     <Route path="/calibrations" element={<PrivateRoute><MainLayout><Calibrations /></MainLayout></PrivateRoute>} />
 
                     <Route path="/locations" element={<PrivateRoute adminOnly={true}><MainLayout><LocationManager /></MainLayout></PrivateRoute>} />
+                    <Route path="/categories" element={<PrivateRoute adminOnly={true}><MainLayout><CategoryManager /></MainLayout></PrivateRoute>} />
                     <Route path="/users" element={<PrivateRoute adminOnly={true}><MainLayout><UserManagement /></MainLayout></PrivateRoute>} />
                     <Route path="/settings" element={<PrivateRoute><MainLayout><div className="glass-card">{t('settings_page')}</div></MainLayout></PrivateRoute>} />
+
+                    {/* Placeholder for order routes */}
+                    <Route path="/orders/history" element={<PrivateRoute><MainLayout><div className="glass-card"><h3>{t('order_history')}</h3><p>Đang phát triển...</p></div></MainLayout></PrivateRoute>} />
+                    <Route path="/orders/progress" element={<PrivateRoute><MainLayout><div className="glass-card"><h3>{t('order_progress')}</h3><p>Đang phát triển...</p></div></MainLayout></PrivateRoute>} />
 
                     <Route path="*" element={<Navigate to="/" />} />
                 </Routes>
